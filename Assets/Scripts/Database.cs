@@ -13,23 +13,31 @@ public static class Database {
         dbconn = new SqliteConnection(conn);
         dbconn.Open();
         dbcmd = dbconn.CreateCommand();
+    }
 
-        string sqlQuery = "SELECT UserID " + "FROM Users";
-        dbcmd.CommandText = sqlQuery;
-        IDataReader reader = dbcmd.ExecuteReader();
-
-        while (reader.Read()) {
-            int userID = reader.GetInt32(0);
-
-            Debug.Log("UserID = " + userID);
-        }
-
-        reader.Close();
-        reader = null;
+    public static void Stop() {
         dbcmd.Dispose();
         dbcmd = null;
         dbconn.Close();
         dbconn = null;
     }
- 
+
+    public static int registerUser(int userID, string username) {
+        string sqlQuery = "INSERT INTO 'Users' ('UserID', 'Username') VALUES ('" + userID + "', '" + username + "')";
+        dbcmd.CommandText = sqlQuery;
+        return dbcmd.ExecuteNonQuery();
+    }
+
+    public static bool checkIsRegistered(int userID, string username) {
+        string sqlQuery = "SELECT COUNT (*) FROM 'Users' WHERE UserID = '" + userID + "' AND Username = '" + username + "'";
+        dbcmd.CommandText = sqlQuery;
+        return int.Parse(dbcmd.ExecuteScalar().ToString()) > 0;
+    }
+
+    public static bool checkIsRegistered(string username) {
+        string sqlQuery = "SELECT COUNT (*) FROM 'Users' WHERE Username = '" + username + "'";
+        dbcmd.CommandText = sqlQuery;
+        return int.Parse(dbcmd.ExecuteScalar().ToString()) > 0;
+    }
+
 }

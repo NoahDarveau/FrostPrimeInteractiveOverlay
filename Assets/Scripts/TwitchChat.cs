@@ -14,6 +14,8 @@ public class TwitchChat : MonoBehaviour {
     private StreamReader reader;
     private StreamWriter writer;
 
+    public bool tags;
+
     private string username, password, channelName; //Get the password from https://twitchapps.com/tmi
    
     void Start() {
@@ -25,11 +27,7 @@ public class TwitchChat : MonoBehaviour {
         Database.Start();
     }
 
-    void OnEnable()
-    {
-        writeChat("helloWorld");
-    }
-
+    
     void Update() {
         if (!TwitchClient.Connected) {
             Connect();
@@ -45,6 +43,7 @@ public class TwitchChat : MonoBehaviour {
 
     void OnApplicationQuit()
     {
+        Database.Stop();
         writeChat("PART #", channelName);
         readChat();
         TwitchClient.Close();
@@ -64,6 +63,9 @@ public class TwitchChat : MonoBehaviour {
         writer.WriteLine("NICK " + username);
         writer.WriteLine("USER " + username + " 8 * :" + username);
         writer.WriteLine("JOIN #" + channelName);
+        if (tags) {
+            writer.WriteLine("CAP REQ :twitch.tv/tags");
+        }
         writer.Flush();
         //Debug.Log(reader.ReadLine());
         Debug.Log("Connected Status: " + TwitchClient.Connected);
@@ -83,6 +85,8 @@ public class TwitchChat : MonoBehaviour {
     private void onMessage(string message) {
         if (message != null) {
 
+            Debug.Log("Raw Message: " + message);
+
             string output = message;
 
             if (message.Contains("PING :"))
@@ -92,29 +96,85 @@ public class TwitchChat : MonoBehaviour {
 
             if (message.Contains("PRIVMSG #"))
             {
-                //string substringKey = "#" + channelName + " :";
-                //output = message.Substring(message.IndexOf(substringKey) + substringKey.Length);
-                int exclamationPointPosition = message.IndexOf("!");
-                string username = message.Substring(1, exclamationPointPosition - 1);
-                //Skip the first character, the first colon, then find the next colon
-                int secondColonPosition = message.IndexOf(':', 1);//the 1 here is what skips the first character
-                string body = message.Substring(secondColonPosition + 1);//Everything past the second colon
-                string channel = message.TrimStart('#');
-                output = username + ": " + body;
 
-                if (body.StartsWith("!")) {
-                    handleCommand(body, username);
+                if (!tags)
+                {
+                    //string substringKey = "#" + channelName + " :";
+                    //output = message.Substring(message.IndexOf(substringKey) + substringKey.Length);
+                    int exclamationPointPosition = message.IndexOf("!");
+                    string username = message.Substring(1, exclamationPointPosition - 1);
+                    //Skip the first character, the first colon, then find the next colon
+                    int secondColonPosition = message.IndexOf(':', 1);//the 1 here is what skips the first character
+                    string body = message.Substring(secondColonPosition + 1);//Everything past the second colon
+                    string channel = message.TrimStart('#');
+                    output = username + ": " + body;
+
+                    Debug.Log("Username: " + username + ", body: " + body);
+
+                    if (body.StartsWith("!")) {
+                        handleCommand(body, username);
+                    }
+                }
+                else if (tags) {
+                    int userIDindex = message.IndexOf("user-id=") + 8;
+                    int userID = int.Parse(message.Substring(userIDindex, 8));
+                    int usernameStartIndex = message.IndexOf("display-name=") + 13;
+                    int usernameEndIndex = message.IndexOf(";emotes");
+                    string username = message.Substring(usernameStartIndex, usernameEndIndex - usernameStartIndex);
+                    string smallerString = message.Substring(message.IndexOf("PRIVMSG") + 1, message.Length - (message.IndexOf("PRIVMSG") + 1));
+                    string body = smallerString.Substring(smallerString.IndexOf(":") + 1, smallerString.Length - (smallerString.IndexOf(":") + 1));
+                    Debug.Log("UserID: " + userID + ", Username: " + username + ", Body: " + body);
+
+                    if (body.StartsWith("!")) {
+                        handleCommand(body, username, userID);
+                    }
+
                 }
             }
-
-            Debug.Log(output);
         }
     }
 
     private int handleCommand(string command, string username) {
 
         switch (command.ToLower()) {
-          
+            case "!amiregistered":           
+                if (Database.checkIsRegistered(username))
+                {
+                    writeChat("PRIVMSG #" + channelName + " :@" + username + ", you are registered");
+                }
+                else
+                {
+                    writeChat("PRIVMSG #" + channelName + " :@" + username + ", you are NOT registered");
+                }
+                break;
+
+        }
+        return -1;
+    }
+
+    private int handleCommand(string command, string username, int userID)
+    {
+
+        switch (command.ToLower())
+        {
+            case "!registerme":
+                if (Database.registerUser(userID, username) > 0) {
+                    writeChat("PRIVMSG #" + channelName + " :@" + username + " has been succesfully registered");
+                } else {
+                    writeChat("PRIVMSG #" + channelName + " :Something went wrong trying to register @" + username + "." +
+                        " This may be because you are already registerd");
+                }
+                break;
+
+            case "!amiregistered":
+                Debug.Log(Database.checkIsRegistered(userID, username));
+                if (Database.checkIsRegistered(userID, username)) {
+                    writeChat("PRIVMSG #" + channelName + " :@" + username + ", you are registered");
+                } else {
+                    writeChat("PRIVMSG #" + channelName + " :@" + username + ", you are NOT registered");
+                }
+                break;
+
         }
         return -1;
     }
